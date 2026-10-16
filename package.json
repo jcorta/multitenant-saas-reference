@@ -1,0 +1,18 @@
+{
+  "name": "multitenant-saas-reference",
+  "private": true,
+  "workspaces": ["apps/*", "e2e"],
+  "scripts": {
+    "keys:generate": "node scripts/generate-keys.mjs",
+    "db:up": "docker compose up -d db",
+    "db:migrate": "npm run migrate -w apps/api",
+    "db:seed": "npm run seed -w apps/api",
+    "dev:api": "npm run start:dev -w apps/api",
+    "dev:web": "npm run dev -w apps/web",
+    "build": "npm run build -w apps/api && npm run build -w apps/web",
+    "lint": "npm run lint -w apps/api",
+    "test": "npm run test -w apps/api",
+    "test:integration": "npm run test:integration -w apps/api",
+    "test:e2e": "npm run test -w e2e"
+  }
+}
