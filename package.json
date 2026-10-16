@@ -1,6 +1,10 @@
 {
   "name": "multitenant-saas-reference",
   "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "workspaces": [
     "apps/*",
     "e2e"
@@ -17,7 +21,7 @@
     "test": "npm run test -w apps/api",
     "test:integration": "npm run test:integration -w apps/api",
     "test:e2e": "npm run test -w e2e",
-    "start:api": "node apps/api/dist/main.js",
+    "start:api": "node apps/api/dist/src/main.js",
     "db:seed:reset": "npm run seed:reset -w apps/api"
   }
 }
