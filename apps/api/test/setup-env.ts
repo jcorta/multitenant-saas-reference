@@ -1,1 +1,1 @@
-import '../scripts/load-env';
+import '../src/load-env';

@@ -1,8 +1,8 @@
-import './load-env';
+import '../src/load-env';
 import { hash } from 'argon2';
 import { Client } from 'pg';
 import { dbConfig } from '../src/config';
-import { SEED_TENANTS } from '../src/seed-data';
+import { SEED_TENANTS } from './seed-data';
 
 // Resets and reseeds development data. Tenant-owned rows are written inside a transaction that
 // sets app.tenant_id, so even the schema owner goes through the same RLS policies as the API.

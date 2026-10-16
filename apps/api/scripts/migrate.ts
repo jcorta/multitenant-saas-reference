@@ -1,11 +1,12 @@
-import './load-env';
+import '../src/load-env';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Client } from 'pg';
 import { dbConfig } from '../src/config';
+import { REPO_ROOT } from '../src/repo-root';
 
 async function main() {
-  const dir = resolve(__dirname, '../migrations');
+  const dir = resolve(REPO_ROOT, 'apps/api/migrations');
   const client = new Client(dbConfig('owner'));
   await client.connect();
   try {

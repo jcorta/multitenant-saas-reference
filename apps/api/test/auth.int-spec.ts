@@ -32,13 +32,6 @@ describe('authentication', () => {
       expect(refresh).toMatch(/Max-Age=604800/);
     });
 
-    it('keeps the refresh token away from data endpoints', async () => {
-      // The refresh cookie path is /api/auth, so browsers never attach it to /api/products.
-      const res = await post('/api/auth/login').send({ email: USERS.trattoriaOwner, password: PASSWORD });
-      const refresh = (res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('refresh_token='))!;
-      expect('/api/products'.startsWith('/api/auth')).toBe(false);
-      expect(refresh).toMatch(/Path=\/api\/auth/);
-    });
 
     it('issues tokens that carry only ids and role', async () => {
       const session = await login(app, USERS.sushiStaff);

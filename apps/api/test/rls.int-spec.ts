@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { Pool, PoolClient } from 'pg';
 import { DataSource } from 'typeorm';
-import { TENANT_SUSHI_ID, TENANT_TRATTORIA_ID } from '../src/seed-data';
+import { TENANT_SUSHI_ID, TENANT_TRATTORIA_ID } from '../scripts/seed-data';
 import { TenantContext } from '../src/tenancy/tenant-context';
 import { TenantRunner } from '../src/tenancy/tenant-runner.service';
 import { createApp, ownerPool, runtimePool } from './helpers';

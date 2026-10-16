@@ -67,8 +67,7 @@ export async function login(app: INestApplication, email: string): Promise<Sessi
 
 // Authenticated request builder that mimics the browser client: cookie plus custom header.
 export function api(app: INestApplication, session: Session) {
-  const base = () => ({ cookie: session.cookie, csrf: 'test' });
-  const wrap = (r: request.Test) => r.set('Cookie', base().cookie).set('X-Requested-With', 'test');
+  const wrap = (r: request.Test) => r.set('Cookie', session.cookie).set('X-Requested-With', 'test');
   const server = app.getHttpServer();
   return {
     get: (url: string) => wrap(request(server).get(url)),

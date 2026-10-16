@@ -1,8 +1,11 @@
 import { INestApplication } from '@nestjs/common';
+import { generateKeyPairSync } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
-import { TENANT_SUSHI_ID, TENANT_TRATTORIA_ID } from '../src/seed-data';
+import { TENANT_SUSHI_ID, TENANT_TRATTORIA_ID } from '../scripts/seed-data';
+import { REPO_ROOT } from '../src/repo-root';
 import { api, createApp, login, Session, USERS } from './helpers';
 
 describe('tenant isolation (HTTP)', () => {
@@ -45,7 +48,7 @@ describe('tenant isolation (HTTP)', () => {
       await trattoria.get(`/api/orders/${sushiOrderId}`).expect(404);
     });
 
-    it('each tenant sees the other as empty ground', async () => {
+    it('still serves the owning tenant its own resource', async () => {
       const own = await sushi.get('/api/products/' + sushiProductId).expect(200);
       expect(own.body.tenantId).toBe(TENANT_SUSHI_ID);
     });
@@ -112,15 +115,15 @@ describe('tenant isolation (HTTP)', () => {
     });
 
     describe('forged tokens', () => {
-      const privateKey = readFileSync('.keys/jwt-private.pem', 'utf8');
-      const publicKey = readFileSync('.keys/jwt-public.pem', 'utf8');
+      const privateKey = readFileSync(resolve(REPO_ROOT, '.keys/jwt-private.pem'), 'utf8');
+      const publicKey = readFileSync(resolve(REPO_ROOT, '.keys/jwt-public.pem'), 'utf8');
       const claims = { sub: '33333333-3333-4333-8333-333333333333', tenant_id: TENANT_SUSHI_ID, role: 'owner' };
       const opts = { issuer: 'restaurant-saas', audience: 'restaurant-saas-web' };
       const probe = (token: string) =>
         request(app.getHttpServer()).get('/api/products').set('Authorization', `Bearer ${token}`);
 
       it('rejects a token for another tenant signed with an unknown key', async () => {
-        const { privateKey: other } = require('node:crypto').generateKeyPairSync('rsa', { modulusLength: 2048 });
+        const { privateKey: other } = generateKeyPairSync('rsa', { modulusLength: 2048 });
         await probe(jwt.sign(claims, other, { algorithm: 'RS256', ...opts })).expect(401);
       });
 

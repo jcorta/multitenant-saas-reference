@@ -1,6 +1,5 @@
 import 'reflect-metadata';
-import { config } from 'dotenv';
-config({ quiet: true });
+import './load-env';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { appConfig } from './config';

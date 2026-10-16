@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { REPO_ROOT } from './repo-root';
 
 function env(name: string, fallback?: string): string {
   const value = process.env[name] ?? fallback;
@@ -8,7 +9,7 @@ function env(name: string, fallback?: string): string {
 }
 
 function readKey(path: string): string {
-  return readFileSync(resolve(process.cwd(), path), 'utf8');
+  return readFileSync(resolve(REPO_ROOT, path), 'utf8');
 }
 
 export interface DbCredentials {
