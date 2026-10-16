@@ -56,14 +56,20 @@ describe('tenant isolation (HTTP)', () => {
 
   describe('writes', () => {
     it("cannot update or delete another tenant's product", async () => {
-      await trattoria.patch(`/api/products/${sushiProductId}`).send({ name: 'hijacked' }).expect(404);
+      await trattoria
+        .patch(`/api/products/${sushiProductId}`)
+        .send({ name: 'hijacked' })
+        .expect(404);
       await trattoria.delete(`/api/products/${sushiProductId}`).expect(404);
       const still = await sushi.get(`/api/products/${sushiProductId}`).expect(200);
       expect(still.body.name).not.toBe('hijacked');
     });
 
     it("cannot update or delete another tenant's order", async () => {
-      await trattoria.patch(`/api/orders/${sushiOrderId}`).send({ customerLabel: 'hijacked' }).expect(404);
+      await trattoria
+        .patch(`/api/orders/${sushiOrderId}`)
+        .send({ customerLabel: 'hijacked' })
+        .expect(404);
       await trattoria.delete(`/api/orders/${sushiOrderId}`).expect(404);
       const still = await sushi.get(`/api/orders/${sushiOrderId}`).expect(200);
       expect(still.body.customerLabel).not.toBe('hijacked');
@@ -95,7 +101,10 @@ describe('tenant isolation (HTTP)', () => {
         .expect(400);
       await trattoria
         .post('/api/orders')
-        .send({ tenant_id: TENANT_SUSHI_ID, items: [{ productId: trattoriaProductId, quantity: 1 }] })
+        .send({
+          tenant_id: TENANT_SUSHI_ID,
+          items: [{ productId: trattoriaProductId, quantity: 1 }],
+        })
         .expect(400);
     });
 
@@ -117,7 +126,11 @@ describe('tenant isolation (HTTP)', () => {
     describe('forged tokens', () => {
       const privateKey = readFileSync(resolve(REPO_ROOT, '.keys/jwt-private.pem'), 'utf8');
       const publicKey = readFileSync(resolve(REPO_ROOT, '.keys/jwt-public.pem'), 'utf8');
-      const claims = { sub: '33333333-3333-4333-8333-333333333333', tenant_id: TENANT_SUSHI_ID, role: 'owner' };
+      const claims = {
+        sub: '33333333-3333-4333-8333-333333333333',
+        tenant_id: TENANT_SUSHI_ID,
+        role: 'owner',
+      };
       const opts = { issuer: 'restaurant-saas', audience: 'restaurant-saas-web' };
       const probe = (token: string) =>
         request(app.getHttpServer()).get('/api/products').set('Authorization', `Bearer ${token}`);
@@ -133,18 +146,26 @@ describe('tenant isolation (HTTP)', () => {
 
       it('rejects unsigned tokens', async () => {
         const enc = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
-        await probe(`${enc({ alg: 'none', typ: 'JWT' })}.${enc({ ...claims, ...opts })}.`).expect(401);
+        await probe(`${enc({ alg: 'none', typ: 'JWT' })}.${enc({ ...claims, ...opts })}.`).expect(
+          401,
+        );
       });
 
-      it("rejects a valid token whose tenant claim was swapped", async () => {
+      it('rejects a valid token whose tenant claim was swapped', async () => {
         const [h, , s] = trattoriaSession.access.split('.');
-        const payload = JSON.parse(Buffer.from(trattoriaSession.access.split('.')[1], 'base64url').toString());
-        const swapped = Buffer.from(JSON.stringify({ ...payload, tenant_id: TENANT_SUSHI_ID })).toString('base64url');
+        const payload = JSON.parse(
+          Buffer.from(trattoriaSession.access.split('.')[1], 'base64url').toString(),
+        );
+        const swapped = Buffer.from(
+          JSON.stringify({ ...payload, tenant_id: TENANT_SUSHI_ID }),
+        ).toString('base64url');
         await probe(`${h}.${swapped}.${s}`).expect(401);
       });
 
       it('rejects an expired token', async () => {
-        await probe(jwt.sign(claims, privateKey, { algorithm: 'RS256', expiresIn: -10, ...opts })).expect(401);
+        await probe(
+          jwt.sign(claims, privateKey, { algorithm: 'RS256', expiresIn: -10, ...opts }),
+        ).expect(401);
       });
 
       it('rejects requests with no credentials', async () => {
@@ -167,10 +188,16 @@ describe('tenant isolation (HTTP)', () => {
       const staff = api(app, await login(app, USERS.trattoriaStaff));
       const created = await staff
         .post('/api/orders')
-        .send({ customerLabel: 'staff order', items: [{ productId: trattoriaProductId, quantity: 2 }] })
+        .send({
+          customerLabel: 'staff order',
+          items: [{ productId: trattoriaProductId, quantity: 2 }],
+        })
         .expect(201);
       expect(created.body.items).toHaveLength(1);
-      const updated = await staff.patch(`/api/orders/${created.body.id}`).send({ status: 'preparing' }).expect(200);
+      const updated = await staff
+        .patch(`/api/orders/${created.body.id}`)
+        .send({ status: 'preparing' })
+        .expect(200);
       expect(updated.body.status).toBe('preparing');
       await staff.patch(`/api/orders/${created.body.id}`).send({ status: 'paid' }).expect(409);
     });
@@ -187,7 +214,10 @@ describe('tenant isolation (HTTP)', () => {
         .send({ items: [{ productId: product.body.id, quantity: 3 }] })
         .expect(201);
       expect(order.body.totalCents).toBe(1500);
-      await trattoria.patch(`/api/products/${product.body.id}`).send({ priceCents: 900 }).expect(200);
+      await trattoria
+        .patch(`/api/products/${product.body.id}`)
+        .send({ priceCents: 900 })
+        .expect(200);
       const reread = await trattoria.get(`/api/orders/${order.body.id}`).expect(200);
       expect(reread.body.totalCents).toBe(1500);
       expect(reread.body.items[0].unitPriceCents).toBe(500);

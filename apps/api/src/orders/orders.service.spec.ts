@@ -20,7 +20,10 @@ describe('OrdersService.update', () => {
   it('writes conditionally on the status it validated', async () => {
     const { service, orders } = setup('pending');
     await service.update('o1', { status: 'preparing' });
-    expect(orders.update).toHaveBeenCalledWith({ id: 'o1', status: 'pending' }, { status: 'preparing' });
+    expect(orders.update).toHaveBeenCalledWith(
+      { id: 'o1', status: 'pending' },
+      { status: 'preparing' },
+    );
   });
 
   it('reports a concurrent change when the conditional write matches no row', async () => {

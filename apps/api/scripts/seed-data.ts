@@ -34,10 +34,38 @@ export const SEED_TENANTS: SeedTenant[] = [
       { name: 'Espresso', description: 'Single shot', priceCents: 300 },
     ],
     orders: [
-      { customer: 'Table 3', status: 'pending', lines: [[0, 2], [3, 1]] },
-      { customer: 'Table 7', status: 'preparing', lines: [[1, 1], [2, 1]] },
-      { customer: 'Takeaway Ana', status: 'served', lines: [[0, 1], [5, 2]] },
-      { customer: 'Table 1', status: 'paid', lines: [[4, 2], [1, 2]] },
+      {
+        customer: 'Table 3',
+        status: 'pending',
+        lines: [
+          [0, 2],
+          [3, 1],
+        ],
+      },
+      {
+        customer: 'Table 7',
+        status: 'preparing',
+        lines: [
+          [1, 1],
+          [2, 1],
+        ],
+      },
+      {
+        customer: 'Takeaway Ana',
+        status: 'served',
+        lines: [
+          [0, 1],
+          [5, 2],
+        ],
+      },
+      {
+        customer: 'Table 1',
+        status: 'paid',
+        lines: [
+          [4, 2],
+          [1, 2],
+        ],
+      },
     ],
   },
   {
@@ -57,9 +85,23 @@ export const SEED_TENANTS: SeedTenant[] = [
       { name: 'Green Tea', description: 'Hot, unlimited refills', priceCents: 250 },
     ],
     orders: [
-      { customer: 'Counter 2', status: 'pending', lines: [[0, 3], [2, 1]] },
+      {
+        customer: 'Counter 2',
+        status: 'pending',
+        lines: [
+          [0, 3],
+          [2, 1],
+        ],
+      },
       { customer: 'Counter 5', status: 'preparing', lines: [[1, 2]] },
-      { customer: 'Delivery Kenji', status: 'served', lines: [[3, 1], [4, 1]] },
+      {
+        customer: 'Delivery Kenji',
+        status: 'served',
+        lines: [
+          [3, 1],
+          [4, 1],
+        ],
+      },
       { customer: 'Counter 1', status: 'cancelled', lines: [[5, 2]] },
     ],
   },

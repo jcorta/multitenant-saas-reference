@@ -34,7 +34,9 @@ describe('JwtAuthGuard', () => {
 
   it('rejects requests without a token', async () => {
     const guard = new JwtAuthGuard(reflectorFor({}), tokens);
-    await expect(guard.canActivate(ctx({ headers: {} }))).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(guard.canActivate(ctx({ headers: {} }))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
 
   it('rejects requests with an invalid token', async () => {
@@ -98,6 +100,8 @@ describe('CsrfGuard', () => {
   it('rejects a foreign Origin even with the header', () => {
     const headers = { 'x-requested-with': 'fetch', origin: 'https://evil.example' };
     expect(() => guard.canActivate(req('DELETE', headers))).toThrow(ForbiddenException);
-    expect(guard.canActivate(req('DELETE', { ...headers, origin: 'http://localhost:3000' }))).toBe(true);
+    expect(guard.canActivate(req('DELETE', { ...headers, origin: 'http://localhost:3000' }))).toBe(
+      true,
+    );
   });
 });

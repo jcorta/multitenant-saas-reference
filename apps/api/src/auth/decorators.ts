@@ -9,5 +9,6 @@ export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 export const Roles = (...roles: UserRole[]) => SetMetadata(ROLES_KEY, roles);
 
 export const CurrentUser = createParamDecorator(
-  (_data: unknown, ctx: ExecutionContext): AuthenticatedUser => ctx.switchToHttp().getRequest().user,
+  (_data: unknown, ctx: ExecutionContext): AuthenticatedUser =>
+    ctx.switchToHttp().getRequest().user,
 );

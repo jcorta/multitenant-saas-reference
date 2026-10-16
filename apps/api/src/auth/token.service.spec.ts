@@ -36,19 +36,32 @@ const claims = { sub: U, tenant_id: T, role: 'owner' };
 describe('TokenService', () => {
   it('round-trips an identity through a signed access token', async () => {
     const token = await service.signAccessToken({ userId: U, tenantId: T, role: 'owner' });
-    expect(await service.verifyAccessToken(token)).toEqual({ userId: U, tenantId: T, role: 'owner' });
+    expect(await service.verifyAccessToken(token)).toEqual({
+      userId: U,
+      tenantId: T,
+      role: 'owner',
+    });
   });
 
   it('puts no personal data in the token', async () => {
     const token = await service.signAccessToken({ userId: U, tenantId: T, role: 'staff' });
-    expect(Object.keys(jwt.decode(token) as object).sort()).toEqual(
-      ['aud', 'exp', 'iat', 'iss', 'role', 'sub', 'tenant_id'],
-    );
+    expect(Object.keys(jwt.decode(token) as object).sort()).toEqual([
+      'aud',
+      'exp',
+      'iat',
+      'iss',
+      'role',
+      'sub',
+      'tenant_id',
+    ]);
   });
 
   it('rejects an expired token', async () => {
     const token = jwt.sign(claims, pair.privateKey, {
-      algorithm: 'RS256', issuer: 'iss', audience: 'aud', expiresIn: -10,
+      algorithm: 'RS256',
+      issuer: 'iss',
+      audience: 'aud',
+      expiresIn: -10,
     });
     expect(await service.verifyAccessToken(token)).toBeNull();
   });
@@ -56,18 +69,27 @@ describe('TokenService', () => {
   it('rejects a tampered payload', async () => {
     const token = await service.signAccessToken({ userId: U, tenantId: T, role: 'staff' });
     const [h, , s] = token.split('.');
-    const forged = Buffer.from(JSON.stringify({ ...claims, role: 'owner', iss: 'iss', aud: 'aud', exp: 9999999999 })).toString('base64url');
+    const forged = Buffer.from(
+      JSON.stringify({ ...claims, role: 'owner', iss: 'iss', aud: 'aud', exp: 9999999999 }),
+    ).toString('base64url');
     expect(await service.verifyAccessToken(`${h}.${forged}.${s}`)).toBeNull();
   });
 
   it('rejects tokens signed with another key', async () => {
-    const other = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' });
+    const other = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({
+      type: 'pkcs8',
+      format: 'pem',
+    });
     const token = jwt.sign(claims, other, { algorithm: 'RS256', issuer: 'iss', audience: 'aud' });
     expect(await service.verifyAccessToken(token)).toBeNull();
   });
 
   it('rejects HS256 tokens signed with the public key as the secret', async () => {
-    const token = jwt.sign(claims, pair.publicKey, { algorithm: 'HS256', issuer: 'iss', audience: 'aud' });
+    const token = jwt.sign(claims, pair.publicKey, {
+      algorithm: 'HS256',
+      issuer: 'iss',
+      audience: 'aud',
+    });
     expect(await service.verifyAccessToken(token)).toBeNull();
   });
 
@@ -83,7 +105,9 @@ describe('TokenService', () => {
     expect(await service.verifyAccessToken(sign(claims, { issuer: 'evil' }))).toBeNull();
     expect(await service.verifyAccessToken(sign(claims, { audience: 'evil' }))).toBeNull();
     expect(await service.verifyAccessToken(sign({ ...claims, role: 'admin' }))).toBeNull();
-    expect(await service.verifyAccessToken(sign({ ...claims, tenant_id: 'not-a-uuid' }))).toBeNull();
+    expect(
+      await service.verifyAccessToken(sign({ ...claims, tenant_id: 'not-a-uuid' })),
+    ).toBeNull();
   });
 
   it('generates distinct opaque refresh tokens and stores only a hash', () => {

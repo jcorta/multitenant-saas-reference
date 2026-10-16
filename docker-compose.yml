@@ -8,12 +8,12 @@ services:
       DB_OWNER_PASSWORD: ${DB_OWNER_PASSWORD:-owner_dev_password}
       DB_RUNTIME_PASSWORD: ${DB_RUNTIME_PASSWORD:-runtime_dev_password}
     ports:
-      - "127.0.0.1:${DB_PORT:-5432}:5432"
+      - '127.0.0.1:${DB_PORT:-5432}:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/db/init-roles.sh:/docker-entrypoint-initdb.d/10-init-roles.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRES_DB:-restaurants}"]
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d ${POSTGRES_DB:-restaurants}']
       interval: 3s
       timeout: 3s
       retries: 20
@@ -59,14 +59,20 @@ services:
     volumes:
       - ./.keys:/app/.keys:ro
     ports:
-      - "127.0.0.1:4000:4000"
+      - '127.0.0.1:4000:4000'
     depends_on:
       migrate:
         condition: service_completed_successfully
       keys:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -79,7 +85,7 @@ services:
       # Resolved by the browser, so it points at the published API port on the host.
       NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-http://localhost:4000/api}
     ports:
-      - "127.0.0.1:3000:3000"
+      - '127.0.0.1:3000:3000'
     depends_on:
       api:
         condition: service_healthy

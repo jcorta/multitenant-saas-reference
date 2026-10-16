@@ -13,7 +13,8 @@ async function submit() {
     await login(email.value, password.value);
     await navigateTo('/orders');
   } catch (err: any) {
-    error.value = err?.statusCode === 401 ? 'Invalid email or password.' : 'Unable to sign in. Try again.';
+    error.value =
+      err?.statusCode === 401 ? 'Invalid email or password.' : 'Unable to sign in. Try again.';
   } finally {
     busy.value = false;
   }

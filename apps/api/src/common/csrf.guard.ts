@@ -1,4 +1,10 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Inject,
+  Injectable,
+} from '@nestjs/common';
 import { AppConfig } from '../config';
 import { APP_CONFIG } from '../config.module';
 
@@ -18,8 +24,12 @@ export class CsrfGuard implements CanActivate {
     if (SAFE_METHODS.has(req.method)) return true;
 
     const origin = req.headers.origin;
-    if (origin && origin !== this.config.webOrigin) throw new ForbiddenException('Origin not allowed');
-    if (!req.headers['x-requested-with']) throw new ForbiddenException('Missing X-Requested-With header');
+    if (origin && origin !== this.config.webOrigin) {
+      throw new ForbiddenException('Origin not allowed');
+    }
+    if (!req.headers['x-requested-with']) {
+      throw new ForbiddenException('Missing X-Requested-With header');
+    }
     return true;
   }
 }

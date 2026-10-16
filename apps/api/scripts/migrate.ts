@@ -16,7 +16,9 @@ async function main() {
     const applied = new Set(
       (await client.query('SELECT name FROM schema_migrations')).rows.map((r) => r.name),
     );
-    for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
+    for (const file of readdirSync(dir)
+      .filter((f) => f.endsWith('.sql'))
+      .sort()) {
       if (applied.has(file)) continue;
       await client.query('BEGIN');
       try {

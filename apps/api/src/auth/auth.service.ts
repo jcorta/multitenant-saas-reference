@@ -17,9 +17,7 @@ export interface SessionTokens {
   user: AuthenticatedUser;
 }
 
-type RefreshOutcome =
-  | { ok: true; user: User; refreshToken: string }
-  | { ok: false };
+type RefreshOutcome = { ok: true; user: User; refreshToken: string } | { ok: false };
 
 @Injectable()
 export class AuthService {
@@ -57,21 +55,28 @@ export class AuthService {
 
     // The tenant comes from the stored token row, never from the request.
     // The outcome is returned rather than thrown so that a family revocation is committed.
-    const outcome = await this.runner.runInTenantContext<RefreshOutcome>(row.tenant_id, async () => {
-      if (row.revoked_at || new Date(row.expires_at) <= new Date()) return { ok: false };
+    const outcome = await this.runner.runInTenantContext<RefreshOutcome>(
+      row.tenant_id,
+      async () => {
+        if (row.revoked_at || new Date(row.expires_at) <= new Date()) return { ok: false };
 
-      const claimed = await this.refreshTokens.markUsed(row.id);
-      if (!claimed) {
-        // An already-rotated token was presented again: assume theft and end the whole session.
-        await this.refreshTokens.revokeFamily(row.family_id);
-        return { ok: false };
-      }
-      const user = await this.users.findOne({ id: row.user_id });
-      if (!user) return { ok: false };
+        const claimed = await this.refreshTokens.markUsed(row.id);
+        if (!claimed) {
+          // An already-rotated token was presented again: assume theft and end the whole session.
+          await this.refreshTokens.revokeFamily(row.family_id);
+          return { ok: false };
+        }
+        const user = await this.users.findOne({ id: row.user_id });
+        if (!user) return { ok: false };
 
-      const identity = { userId: user.id, tenantId: user.tenantId, role: user.role };
-      return { ok: true, user, refreshToken: await this.issueRefreshToken(identity, row.family_id) };
-    });
+        const identity = { userId: user.id, tenantId: user.tenantId, role: user.role };
+        return {
+          ok: true,
+          user,
+          refreshToken: await this.issueRefreshToken(identity, row.family_id),
+        };
+      },
+    );
     if (!outcome.ok) throw new UnauthorizedException();
 
     const user: AuthenticatedUser = {
@@ -79,7 +84,11 @@ export class AuthService {
       tenantId: outcome.user.tenantId,
       role: outcome.user.role,
     };
-    return { user, refreshToken: outcome.refreshToken, accessToken: await this.tokens.signAccessToken(user) };
+    return {
+      user,
+      refreshToken: outcome.refreshToken,
+      accessToken: await this.tokens.signAccessToken(user),
+    };
   }
 
   async logout(rawToken: string | undefined): Promise<void> {

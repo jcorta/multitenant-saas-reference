@@ -22,6 +22,11 @@
     "test:integration": "npm run test:integration -w apps/api",
     "test:e2e": "npm run test -w e2e",
     "start:api": "node apps/api/dist/src/main.js",
-    "db:seed:reset": "npm run seed:reset -w apps/api"
+    "db:seed:reset": "npm run seed:reset -w apps/api",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.9.10"
   }
 }

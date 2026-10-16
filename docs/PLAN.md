@@ -1,6 +1,7 @@
 # Implementation Plan
 
 Phases (each ends with green checks and a commit):
+
 - **P0 Docs & scaffolding:** SPEC/PLAN/TASKS, workspaces, lint/format, `.gitignore`, `.editorconfig`, `.env.example`.
 - **P1 Database:** compose `db`, migrations (roles, tables, composite FKs, indexes, RLS + FORCE, policies, grants, `auth_find_user_by_email`), seed.
 - **P2 Tenancy core:** `TenantContext`, `runInTenantContext` helper (also usable outside HTTP, e.g. jobs, tools, MCP servers), interceptor built on it, `TenantRepository`, DB module with owner and runtime DataSources.
@@ -12,5 +13,3 @@ Phases (each ends with green checks and a commit):
 - **P8 E2E:** Playwright flows against the stack.
 - **P9 Documentation & CI:** ADRs, README (overview, architecture, RLS, setup, tests), GitHub Actions.
 - **P10 Final verification:** all suites green from a clean checkout, compose up, isolation tests pass.
-
-

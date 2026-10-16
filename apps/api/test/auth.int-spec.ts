@@ -14,7 +14,9 @@ describe('authentication', () => {
 
   describe('login', () => {
     it('sets httpOnly, Secure, SameSite=Strict cookies and returns no token in the body', async () => {
-      const res = await post('/api/auth/login').send({ email: USERS.trattoriaOwner, password: PASSWORD }).expect(200);
+      const res = await post('/api/auth/login')
+        .send({ email: USERS.trattoriaOwner, password: PASSWORD })
+        .expect(200);
       expect(JSON.stringify(res.body)).not.toMatch(/eyJ/);
       expect(res.body).toEqual({ userId: expect.any(String), role: 'owner' });
 
@@ -32,17 +34,28 @@ describe('authentication', () => {
       expect(refresh).toMatch(/Max-Age=604800/);
     });
 
-
     it('issues tokens that carry only ids and role', async () => {
       const session = await login(app, USERS.sushiStaff);
       const payload = JSON.parse(Buffer.from(session.access.split('.')[1], 'base64url').toString());
-      expect(Object.keys(payload).sort()).toEqual(['aud', 'exp', 'iat', 'iss', 'role', 'sub', 'tenant_id']);
+      expect(Object.keys(payload).sort()).toEqual([
+        'aud',
+        'exp',
+        'iat',
+        'iss',
+        'role',
+        'sub',
+        'tenant_id',
+      ]);
       expect(payload.role).toBe('staff');
     });
 
     it('answers wrong password and unknown email identically', async () => {
-      const wrong = await post('/api/auth/login').send({ email: USERS.trattoriaOwner, password: 'nope' }).expect(401);
-      const unknown = await post('/api/auth/login').send({ email: 'ghost@example.com', password: 'nope' }).expect(401);
+      const wrong = await post('/api/auth/login')
+        .send({ email: USERS.trattoriaOwner, password: 'nope' })
+        .expect(401);
+      const unknown = await post('/api/auth/login')
+        .send({ email: 'ghost@example.com', password: 'nope' })
+        .expect(401);
       expect(wrong.body).toEqual(unknown.body);
       expect(wrong.headers['set-cookie']).toBeUndefined();
     });
@@ -53,7 +66,9 @@ describe('authentication', () => {
     });
 
     it('exposes the session identity and tenant at /auth/me', async () => {
-      const me = await api(app, await login(app, USERS.sushiOwner)).get('/api/auth/me').expect(200);
+      const me = await api(app, await login(app, USERS.sushiOwner))
+        .get('/api/auth/me')
+        .expect(200);
       expect(me.body).toMatchObject({
         email: USERS.sushiOwner,
         role: 'owner',
@@ -65,7 +80,10 @@ describe('authentication', () => {
 
   describe('CSRF defense in depth', () => {
     it('rejects state-changing requests without the custom header', async () => {
-      await http().post('/api/auth/login').send({ email: USERS.trattoriaOwner, password: PASSWORD }).expect(403);
+      await http()
+        .post('/api/auth/login')
+        .send({ email: USERS.trattoriaOwner, password: PASSWORD })
+        .expect(403);
     });
 
     it('rejects state-changing requests from a foreign origin', async () => {
@@ -86,7 +104,8 @@ describe('authentication', () => {
   });
 
   describe('refresh tokens', () => {
-    const refreshWith = (token: string) => post('/api/auth/refresh').set('Cookie', `refresh_token=${token}`);
+    const refreshWith = (token: string) =>
+      post('/api/auth/refresh').set('Cookie', `refresh_token=${token}`);
 
     it('rotates the refresh token on every use and issues a fresh access token', async () => {
       const first = await login(app, USERS.trattoriaOwner);
@@ -96,12 +115,14 @@ describe('authentication', () => {
       expect(next.refresh_token).toBeTruthy();
       expect(next.refresh_token).not.toBe(first.refresh);
       expect(next.access_token).toBeTruthy();
-      await api(app, { ...first, cookie: `access_token=${next.access_token}` }).get('/api/products').expect(200);
+      await api(app, { ...first, cookie: `access_token=${next.access_token}` })
+        .get('/api/products')
+        .expect(200);
 
       const third = await refreshWith(next.refresh_token).expect(200);
-      expect(parseSetCookie(third.headers['set-cookie'] as unknown as string[]).refresh_token).not.toBe(
-        next.refresh_token,
-      );
+      expect(
+        parseSetCookie(third.headers['set-cookie'] as unknown as string[]).refresh_token,
+      ).not.toBe(next.refresh_token);
     });
 
     it('revokes the whole token family when a rotated token is presented again', async () => {

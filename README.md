@@ -64,10 +64,10 @@ npm run dev:web              # http://localhost:3000
 
 Two restaurants with separate data, and an owner and a staff user in each. All seeded users share the password from `SEED_PASSWORD` (default `ChangeMe123!`, development only).
 
-| Restaurant     | Owner                       | Staff                       |
-| -------------- | --------------------------- | --------------------------- |
-| Trattoria Roma | `owner@trattoria.example`   | `staff@trattoria.example`   |
-| Sushi Kaze     | `owner@sushikaze.example`   | `staff@sushikaze.example`   |
+| Restaurant     | Owner                     | Staff                     |
+| -------------- | ------------------------- | ------------------------- |
+| Trattoria Roma | `owner@trattoria.example` | `staff@trattoria.example` |
+| Sushi Kaze     | `owner@sushikaze.example` | `staff@sushikaze.example` |
 
 Owners can manage products and orders; staff can read products and create, read and advance orders.
 
@@ -93,15 +93,15 @@ The tenant-isolation guarantees are covered by `apps/api/test/isolation.int-spec
 
 All routes are under `/api`. Lists accept `limit` (1–100) and `offset`.
 
-| Route                                                  | Roles        |
-| ------------------------------------------------------ | ------------ |
-| `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout` | public |
-| `GET /auth/me`                                         | any          |
-| `GET /products`, `GET /products/:id`                   | owner, staff |
-| `POST /products`, `PATCH /products/:id`, `DELETE /products/:id` | owner |
+| Route                                                                 | Roles        |
+| --------------------------------------------------------------------- | ------------ |
+| `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`         | public       |
+| `GET /auth/me`                                                        | any          |
+| `GET /products`, `GET /products/:id`                                  | owner, staff |
+| `POST /products`, `PATCH /products/:id`, `DELETE /products/:id`       | owner        |
 | `GET /orders`, `GET /orders/:id`, `POST /orders`, `PATCH /orders/:id` | owner, staff |
-| `DELETE /orders/:id`                                   | owner        |
-| `GET /health`                                          | public       |
+| `DELETE /orders/:id`                                                  | owner        |
+| `GET /health`                                                         | public       |
 
 ## Repository layout
 

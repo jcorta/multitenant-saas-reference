@@ -128,7 +128,13 @@ onMounted(() => {
               {{ p.name }} · {{ formatMoney(p.priceCents) }}
             </option>
           </select>
-          <input v-model.number="line.quantity" type="number" min="1" max="99" :data-testid="`quantity-${i}`" />
+          <input
+            v-model.number="line.quantity"
+            type="number"
+            min="1"
+            max="99"
+            :data-testid="`quantity-${i}`"
+          />
           <button
             type="button"
             class="secondary"
@@ -139,11 +145,18 @@ onMounted(() => {
           </button>
         </div>
         <div class="actions">
-          <button type="button" class="secondary" data-testid="add-line" @click="lines.push({ productId: '', quantity: 1 })">
+          <button
+            type="button"
+            class="secondary"
+            data-testid="add-line"
+            @click="lines.push({ productId: '', quantity: 1 })"
+          >
             Add product
           </button>
           <strong data-testid="draft-total">Total {{ formatMoney(draftTotal) }}</strong>
-          <button type="submit" :disabled="submitting" data-testid="create-order">Create order</button>
+          <button type="submit" :disabled="submitting" data-testid="create-order">
+            Create order
+          </button>
         </div>
         <p v-if="formError" class="error" role="alert">{{ formError }}</p>
       </form>
@@ -160,19 +173,29 @@ onMounted(() => {
           </select>
         </label>
       </div>
-      <p v-if="actionError" class="error" role="alert" data-testid="action-error">{{ actionError }}</p>
+      <p v-if="actionError" class="error" role="alert" data-testid="action-error">
+        {{ actionError }}
+      </p>
       <p v-if="loadError" class="error" role="alert">{{ loadError }}</p>
       <p v-else-if="orders.length === 0" class="muted">No orders yet.</p>
       <table v-else data-testid="orders-table">
         <thead>
-          <tr><th>Customer</th><th>Items</th><th>Total</th><th>Status</th><th /></tr>
+          <tr>
+            <th>Customer</th>
+            <th>Items</th>
+            <th>Total</th>
+            <th>Status</th>
+            <th />
+          </tr>
         </thead>
         <tbody>
           <tr v-for="o in orders" :key="o.id" data-testid="order-row">
             <td>{{ o.customerLabel || '—' }}</td>
             <td>{{ o.items.map((i) => `${i.quantity}× ${i.productName}`).join(', ') }}</td>
             <td>{{ formatMoney(o.totalCents) }}</td>
-            <td><span class="badge" :class="o.status">{{ o.status }}</span></td>
+            <td>
+              <span class="badge" :class="o.status">{{ o.status }}</span>
+            </td>
             <td class="row-actions">
               <button
                 v-for="next in NEXT_STATUSES[o.status]"
@@ -189,8 +212,13 @@ onMounted(() => {
       </table>
       <div class="actions">
         <button class="secondary" :disabled="offset === 0" @click="page(-1)">Previous</button>
-        <span class="muted">{{ total === 0 ? 0 : offset + 1 }}–{{ Math.min(offset + PAGE_SIZE, total) }} of {{ total }}</span>
-        <button class="secondary" :disabled="offset + PAGE_SIZE >= total" @click="page(1)">Next</button>
+        <span class="muted"
+          >{{ total === 0 ? 0 : offset + 1 }}–{{ Math.min(offset + PAGE_SIZE, total) }} of
+          {{ total }}</span
+        >
+        <button class="secondary" :disabled="offset + PAGE_SIZE >= total" @click="page(1)">
+          Next
+        </button>
       </div>
     </section>
   </main>

@@ -13,4 +13,5 @@
 **P10** [x] clean-checkout run of all suites · [x] docker compose up verified
 
 ## Verification
+
 `docker compose up --build` healthy; `npm test`, `npm run test:integration`, `npm run test:e2e` green; isolation and request-manipulation suites pass; RLS raw-query test passes with app-layer scoping bypassed.

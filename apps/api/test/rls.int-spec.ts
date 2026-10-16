@@ -21,7 +21,10 @@ describe('Row-Level Security (database layer)', () => {
     await owner.end();
   });
 
-  async function asTenant<T>(tenantId: string | null, fn: (c: PoolClient) => Promise<T>): Promise<T> {
+  async function asTenant<T>(
+    tenantId: string | null,
+    fn: (c: PoolClient) => Promise<T>,
+  ): Promise<T> {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -37,7 +40,7 @@ describe('Row-Level Security (database layer)', () => {
 
   it('runs the API as a role that cannot bypass RLS', async () => {
     const { rows } = await pool.query(
-      "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user",
+      'SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user',
     );
     expect(rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
   });
@@ -48,7 +51,8 @@ describe('Row-Level Security (database layer)', () => {
       [tables],
     );
     expect(rows).toHaveLength(tables.length);
-    for (const r of rows) expect(r).toMatchObject({ relrowsecurity: true, relforcerowsecurity: true });
+    for (const r of rows)
+      expect(r).toMatchObject({ relrowsecurity: true, relforcerowsecurity: true });
   });
 
   it('returns only the current tenant rows from a plain unfiltered query', async () => {
@@ -57,7 +61,9 @@ describe('Row-Level Security (database layer)', () => {
       [TENANT_SUSHI_ID, TENANT_TRATTORIA_ID],
     ]) {
       for (const table of ['products', 'orders', 'order_items']) {
-        const { rows } = await asTenant(tenant, (c) => c.query(`SELECT DISTINCT tenant_id FROM ${table}`));
+        const { rows } = await asTenant(tenant, (c) =>
+          c.query(`SELECT DISTINCT tenant_id FROM ${table}`),
+        );
         expect(rows.map((r) => r.tenant_id)).toEqual([tenant]);
         expect(rows.map((r) => r.tenant_id)).not.toContain(other);
       }
@@ -65,7 +71,9 @@ describe('Row-Level Security (database layer)', () => {
   });
 
   it("cannot read another tenant's row even by primary key", async () => {
-    const { rows: sushi } = await asTenant(TENANT_SUSHI_ID, (c) => c.query('SELECT id FROM products LIMIT 1'));
+    const { rows: sushi } = await asTenant(TENANT_SUSHI_ID, (c) =>
+      c.query('SELECT id FROM products LIMIT 1'),
+    );
     const { rows } = await asTenant(TENANT_TRATTORIA_ID, (c) =>
       c.query('SELECT id FROM products WHERE id = $1', [sushi[0].id]),
     );
@@ -95,21 +103,30 @@ describe('Row-Level Security (database layer)', () => {
   it('blocks inserting a row for another tenant', async () => {
     await expect(
       asTenant(TENANT_TRATTORIA_ID, (c) =>
-        c.query('INSERT INTO products (tenant_id, name, price_cents) VALUES ($1, $2, 1)', [TENANT_SUSHI_ID, 'x']),
+        c.query('INSERT INTO products (tenant_id, name, price_cents) VALUES ($1, $2, 1)', [
+          TENANT_SUSHI_ID,
+          'x',
+        ]),
       ),
     ).rejects.toThrow(/row-level security/);
   });
 
   it('blocks moving a row to another tenant and ignores updates and deletes of foreign rows', async () => {
-    const { rows: sushi } = await asTenant(TENANT_SUSHI_ID, (c) => c.query('SELECT id FROM products LIMIT 1'));
+    const { rows: sushi } = await asTenant(TENANT_SUSHI_ID, (c) =>
+      c.query('SELECT id FROM products LIMIT 1'),
+    );
     await expect(
-      asTenant(TENANT_TRATTORIA_ID, (c) => c.query('UPDATE products SET tenant_id = $1', [TENANT_SUSHI_ID])),
+      asTenant(TENANT_TRATTORIA_ID, (c) =>
+        c.query('UPDATE products SET tenant_id = $1', [TENANT_SUSHI_ID]),
+      ),
     ).rejects.toThrow(/row-level security/);
 
     const upd = await asTenant(TENANT_TRATTORIA_ID, (c) =>
       c.query("UPDATE products SET name = 'hijacked' WHERE id = $1", [sushi[0].id]),
     );
-    const del = await asTenant(TENANT_TRATTORIA_ID, (c) => c.query('DELETE FROM products WHERE id = $1', [sushi[0].id]));
+    const del = await asTenant(TENANT_TRATTORIA_ID, (c) =>
+      c.query('DELETE FROM products WHERE id = $1', [sushi[0].id]),
+    );
     expect(upd.rowCount).toBe(0);
     expect(del.rowCount).toBe(0);
   });
@@ -120,7 +137,9 @@ describe('Row-Level Security (database layer)', () => {
   });
 
   it('rejects order items that reference another tenant product (composite foreign key)', async () => {
-    const { rows: sushiProducts } = await asTenant(TENANT_SUSHI_ID, (c) => c.query('SELECT id FROM products LIMIT 1'));
+    const { rows: sushiProducts } = await asTenant(TENANT_SUSHI_ID, (c) =>
+      c.query('SELECT id FROM products LIMIT 1'),
+    );
     await expect(
       asTenant(TENANT_TRATTORIA_ID, async (c) => {
         const { rows: orders } = await c.query('SELECT id FROM orders LIMIT 1');
@@ -136,7 +155,9 @@ describe('Row-Level Security (database layer)', () => {
   it('exposes user and refresh-token rows only through the narrow lookup functions', async () => {
     const direct = await pool.query('SELECT 1 FROM users');
     expect(direct.rows).toHaveLength(0);
-    const byEmail = await pool.query("SELECT * FROM auth_find_user_by_email('owner@trattoria.example')");
+    const byEmail = await pool.query(
+      "SELECT * FROM auth_find_user_by_email('owner@trattoria.example')",
+    );
     expect(byEmail.rows).toHaveLength(1);
     expect(byEmail.rows[0].tenant_id).toBe(TENANT_TRATTORIA_ID);
     const none = await pool.query("SELECT * FROM auth_find_user_by_email('nobody@example.com')");
@@ -171,7 +192,9 @@ describe('runInTenantContext (outside HTTP)', () => {
 
   it('keeps concurrent tenants apart', async () => {
     const results = await Promise.all(
-      Array.from({ length: 10 }, (_, i) => tenantsSeen(i % 2 ? TENANT_SUSHI_ID : TENANT_TRATTORIA_ID)),
+      Array.from({ length: 10 }, (_, i) =>
+        tenantsSeen(i % 2 ? TENANT_SUSHI_ID : TENANT_TRATTORIA_ID),
+      ),
     );
     results.forEach((r, i) => expect(r).toEqual([i % 2 ? TENANT_SUSHI_ID : TENANT_TRATTORIA_ID]));
   });

@@ -61,7 +61,12 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    const userRow = () => ({ id: USER, tenant_id: TENANT, password_hash: passwordHash, role: 'owner' });
+    const userRow = () => ({
+      id: USER,
+      tenant_id: TENANT,
+      password_hash: passwordHash,
+      role: 'owner',
+    });
 
     it('issues a session in the tenant of the stored user', async () => {
       const { service, runner, refreshTokens } = setup({ user: userRow() });
@@ -99,8 +104,14 @@ describe('AuthService', () => {
 
       expect(runner.runInTenantContext).toHaveBeenCalledWith(TENANT, expect.any(Function));
       expect(refreshTokens.markUsed).toHaveBeenCalledWith('rt-1');
-      expect(refreshTokens.save).toHaveBeenCalledWith(expect.objectContaining({ familyId: FAMILY }));
-      expect(tokens.signAccessToken).toHaveBeenCalledWith({ userId: USER, tenantId: TENANT, role: 'staff' });
+      expect(refreshTokens.save).toHaveBeenCalledWith(
+        expect.objectContaining({ familyId: FAMILY }),
+      );
+      expect(tokens.signAccessToken).toHaveBeenCalledWith({
+        userId: USER,
+        tenantId: TENANT,
+        role: 'staff',
+      });
       expect(session.refreshToken).toBe('new-raw');
     });
 
