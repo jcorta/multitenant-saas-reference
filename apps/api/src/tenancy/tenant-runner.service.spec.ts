@@ -50,6 +50,15 @@ describe('TenantRunner.runInTenantContext', () => {
     ).rejects.toThrow('boom');
   });
 
+  it('refuses to nest, so inner code cannot silently switch tenant', async () => {
+    const { runner } = setup();
+    const OTHER = '22222222-2222-4222-8222-222222222222';
+    await runner.runInTenantContext(TENANT, async () => {
+      expect(() => runner.runInTenantContext(OTHER, async () => undefined)).toThrow(/nested/);
+      expect(TenantContext.tenantId()).toBe(TENANT);
+    });
+  });
+
   it('rejects ids that are not UUIDs before touching the database', () => {
     const { manager, runner } = setup();
     expect(() => runner.runInTenantContext("x'; drop table users;--", async () => 1)).toThrow();

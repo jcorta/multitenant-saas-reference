@@ -3,6 +3,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { hash, verify } from 'argon2';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
+import { TenantContext } from '../tenancy/tenant-context';
 import { Tenant } from '../tenancy/tenant.entity';
 import { TenantRunner } from '../tenancy/tenant-runner.service';
 import { AuthenticatedUser } from './authenticated-user';
@@ -96,7 +97,9 @@ export class AuthService {
   async me(identity: AuthenticatedUser) {
     const user = await this.users.findOne({ id: identity.userId });
     if (!user) throw new UnauthorizedException();
-    const tenant = await this.dataSource.getRepository(Tenant).findOneByOrFail({ id: user.tenantId });
+    const tenant = await TenantContext.manager()
+      .getRepository(Tenant)
+      .findOneByOrFail({ id: TenantContext.tenantId() });
     return {
       id: user.id,
       email: user.email,

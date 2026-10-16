@@ -21,6 +21,10 @@ export const TenantContext = {
     return storage.run(store, fn);
   },
 
+  isActive(): boolean {
+    return storage.getStore() !== undefined;
+  },
+
   current(): TenantContextStore {
     const store = storage.getStore();
     if (!store) {

@@ -42,7 +42,12 @@ export abstract class TenantRepository<E extends ObjectLiteral & { tenantId: str
     return this.repo.count({ where: this.scoped(where) });
   }
 
+  // Insert only. TypeORM's save() upserts by primary key, and an id belonging to another tenant
+  // would be invisible under RLS and surface as a confusing key violation.
   save(data: DeepPartial<E>): Promise<E> {
+    if ((data as { id?: unknown }).id !== undefined) {
+      throw new Error('TenantRepository.save creates new rows only; use update() for existing rows');
+    }
     const entity = this.repo.create({ ...data, tenantId: TenantContext.tenantId() } as DeepPartial<E>);
     return this.repo.save(entity);
   }

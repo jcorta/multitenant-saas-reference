@@ -25,6 +25,11 @@ export class TenantRunner {
     if (!UUID.test(tenantId)) {
       throw new Error('runInTenantContext requires a valid tenant id');
     }
+    // A nested call would open a second transaction and silently switch the tenant for the inner
+    // code, so nesting is refused rather than allowed to shadow the outer context.
+    if (TenantContext.isActive()) {
+      throw new Error('runInTenantContext cannot be nested inside an existing tenant context');
+    }
     return this.dataSource.transaction(async (manager) => {
       // is_local = true scopes the setting to this transaction, so a pooled connection never
       // carries a tenant over to the next borrower.

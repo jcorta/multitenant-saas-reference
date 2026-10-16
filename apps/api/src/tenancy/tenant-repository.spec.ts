@@ -68,6 +68,13 @@ describe('TenantRepository', () => {
     });
   });
 
+  it('only inserts: save refuses a primary key', async () => {
+    await inTenant('t1', async (repo) => {
+      expect(() => things.save({ id: '1', name: 'x' })).toThrow(/new rows only/);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+  });
+
   it('scopes updates and deletes and never rewrites tenantId', async () => {
     await inTenant('t1', async (repo) => {
       await things.update({ id: '1' }, { name: 'y', tenantId: 'other' });

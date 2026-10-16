@@ -90,7 +90,14 @@ export class OrdersService {
     if (dto.status && !canTransition(order.status, dto.status)) {
       throw new ConflictException(`Cannot change status from ${order.status} to ${dto.status}`);
     }
-    if (Object.keys(dto).length > 0) await this.orders.update({ id }, dto);
+    if (Object.keys(dto).length > 0) {
+      // Compare-and-set on the status that was validated, so two concurrent transitions cannot
+      // both succeed from the same starting state.
+      const affected = await this.orders.update({ id, status: order.status }, dto);
+      if (affected === 0) {
+        throw new ConflictException('Order was modified concurrently; reload and retry');
+      }
+    }
     return this.get(id);
   }
 
