@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: restaurants
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: cp .env.example .env
+      - run: npm run keys:generate
+      - name: Create database roles
+        run: |
+          export PGPASSWORD=postgres
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE app_owner LOGIN PASSWORD 'owner_dev_password' NOSUPERUSER NOBYPASSRLS;
+          CREATE ROLE app_runtime LOGIN PASSWORD 'runtime_dev_password' NOSUPERUSER NOBYPASSRLS;
+          CREATE ROLE app_auth NOLOGIN NOSUPERUSER BYPASSRLS;
+          GRANT app_auth TO app_owner;
+          ALTER DATABASE restaurants OWNER TO app_owner;
+          SQL
+      - run: npm run lint
+      - run: npm test
+      - run: npm run db:migrate
+      - run: npm run db:seed
+      - run: npm run test:integration
+      - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: cp .env.example .env
+      - run: npm run keys:generate
+      - run: docker compose up -d --build --wait
+      - run: npm run test:e2e
+      - if: failure()
+        run: docker compose logs

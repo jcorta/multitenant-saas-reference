@@ -8,7 +8,8 @@
     "seed": "ts-node scripts/seed.ts",
     "lint": "eslint \"{src,test,scripts}/**/*.ts\"",
     "test": "jest --config jest.config.js",
-    "test:integration": "jest --config jest.integration.config.js --runInBand"
+    "test:integration": "jest --config jest.integration.config.js --runInBand",
+    "seed:reset": "ts-node scripts/seed.ts --reset"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.22",

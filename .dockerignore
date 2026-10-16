@@ -1,0 +1,10 @@
+node_modules
+**/node_modules
+**/dist
+**/.nuxt
+**/.output
+.git
+.keys
+.env
+e2e/test-results
+e2e/playwright-report

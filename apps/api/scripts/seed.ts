@@ -14,6 +14,11 @@ async function main() {
   const client = new Client(dbConfig('owner'));
   await client.connect();
   try {
+    const { rows: existing } = await client.query('SELECT count(*)::int AS n FROM tenants');
+    if (existing[0].n > 0 && !process.argv.includes('--reset')) {
+      console.log('Database already seeded; pass --reset to wipe and reseed.');
+      return;
+    }
     await client.query(
       'TRUNCATE refresh_tokens, order_items, orders, products, users, tenants CASCADE',
     );

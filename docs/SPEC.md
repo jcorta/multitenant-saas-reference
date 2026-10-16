@@ -26,12 +26,12 @@ Request flow:
 - `products(id, tenant_id, name, description, price_cents int ≥0, currency char(3) default 'USD', active bool, created_at, updated_at)` — RLS.
 - `orders(id, tenant_id, status enum[pending,preparing,served,paid,cancelled], customer_label text null, total_cents int, created_by uuid, created_at, updated_at)` — RLS.
 - `order_items(id, tenant_id, order_id, product_id, product_name, unit_price_cents, quantity int >0)` — RLS; composite FKs `(tenant_id, order_id)` / `(tenant_id, product_id)` so cross-tenant references are impossible at the schema level.
-- `refresh_tokens(id, tenant_id, user_id, family_id, token_hash unique, expires_at, used_at null, revoked_at null, created_at)` — RLS. Because refresh happens before a tenant is known, access goes through `SECURITY DEFINER` functions (`auth_find_refresh_token(hash)`, `auth_revoke_family(family_id)`) in addition to `auth_find_user_by_email`; the authoritative `tenant_id` then comes from the stored row, never the client.
+- `refresh_tokens(id, tenant_id, user_id, family_id, token_hash unique, expires_at, used_at null, revoked_at null, created_at)` — RLS. Because refresh happens before a tenant is known, the lookup goes through the `SECURITY DEFINER` function `auth_find_refresh_token(hash)` (alongside `auth_find_user_by_email`); the authoritative `tenant_id` then comes from the stored row, never the client, and rotation and revocation run under RLS in that tenant's context.
 - Prices are integer cents. Unit price and name are snapshotted at order time; total is computed server-side.
 
-Roles: `app_owner` (owns schema, runs migrations, bypasses nothing it shouldn't — used only by migrate/seed), `app_runtime` (non-superuser, `NOBYPASSRLS`, DML only). Tables use `FORCE ROW LEVEL SECURITY`.
+Roles: `app_owner` (owns the schema; used only by migrations and seed), `app_runtime` (non-superuser, `NOBYPASSRLS`, DML only, used by the API), and `app_auth` (`BYPASSRLS`, owns only the two lookup functions). Tables use `FORCE ROW LEVEL SECURITY`.
 
-**Login lookup problem:** login happens before a tenant is known. A `SECURITY DEFINER` function `auth_find_user_by_email(email)` owned by the owner role returns the single matching user row (id, tenant_id, password_hash, role); `app_runtime` has EXECUTE on it and no other way around RLS on `users`. Documented in an ADR.
+**Login lookup problem:** login happens before a tenant is known. A `SECURITY DEFINER` function `auth_find_user_by_email(email)` owned by `app_auth` returns the single matching user row (id, tenant_id, password_hash, role); `app_runtime` has EXECUTE on it and no other way around RLS on `users`. Documented in an ADR.
 
 ## 6. API (JSON, prefix `/api`)
 | Method & path | Role | Notes |
@@ -58,7 +58,7 @@ Staff: read products; create, read, update-status orders. Owner: everything.
 The guard reads the access token from the cookie (an `Authorization: Bearer` header is also accepted for API/test clients).
 
 ## 8. Frontend (Nuxt 3)
-Pages: `/login`, `/orders` (list with status filter + pagination, create-order form selecting active products and quantities, status update). A `useApi` composable calls the API with `credentials: 'include'`; on a 401 it performs a single-flight `POST /auth/refresh` and retries once, otherwise redirects to `/login`. Session state comes from `GET /auth/me` (token never readable by JS, so nothing is kept in localStorage). The browser calls the API directly (no Nuxt server proxy routes). Nuxt is used as a client-rendered app for authenticated pages (SSR for the login shell only), which avoids forwarding cookies server-side. Header shows restaurant name and role; logout button. Plain CSS, English UI.
+Pages: `/login`, `/orders` (list with status filter + pagination, create-order form selecting active products and quantities, status update). A `useApi` composable calls the API with `credentials: 'include'`; on a 401 it performs a single-flight `POST /auth/refresh` and retries once, otherwise redirects to `/login`. Session state comes from `GET /auth/me` (token never readable by JS, so nothing is kept in localStorage). The browser calls the API directly (no Nuxt server proxy routes). Nuxt runs as a client-rendered SPA (`ssr: false`), which avoids forwarding cookies server-side. Header shows restaurant name and role; logout button. Plain CSS, English UI.
 
 ## 9. Seed data
 Tenants: "Trattoria Roma" and "Sushi Kaze", 6 products and 4 orders each (distinct names/prices). Users (dev-only, documented in README): `owner@trattoria.example`, `staff@trattoria.example`, `owner@sushikaze.example`, `staff@sushikaze.example`; known dev password from env `SEED_PASSWORD`.
