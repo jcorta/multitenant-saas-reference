@@ -11,13 +11,14 @@ A reference implementation of a multi-tenant SaaS for restaurant ordering. Each 
 ## Architecture
 
 ```
-Browser ──cookies (httpOnly)──▶ API (NestJS) ──▶ PostgreSQL
-                                  │                 ▲
-   JwtAuthGuard  ─ verifies RS256 token, extracts {user, tenant, role}
-   Interceptor   ─ runInTenantContext(tenantId): BEGIN; set_config('app.tenant_id', …, local)
-   AsyncLocalStorage context ─ holds tenant + the transaction's EntityManager
-   TenantRepository ─ always filters / stamps tenant_id
-                                                    RLS policy: tenant_id = app.tenant_id
+Browser ── httpOnly cookies ──▶ API (NestJS) ─────────────────────────────▶ PostgreSQL
+                                 │
+                                 ├─ JwtAuthGuard      verifies the RS256 token → { user, tenant, role }
+                                 ├─ Interceptor       runInTenantContext(tenant):
+                                 │                      BEGIN; set_config('app.tenant_id', tenant, true)
+                                 ├─ AsyncLocalStorage holds the tenant and the transaction
+                                 └─ TenantRepository  scopes every query to the tenant
+                                                                   RLS: tenant_id = app.tenant_id
 ```
 
 ### Multi-tenancy
@@ -37,7 +38,7 @@ Design decisions are recorded in [`docs/adr`](docs/adr); the full specification 
 
 ## Running locally
 
-Prerequisites: Docker with Compose, Node.js 22 or later (for tests and development mode).
+Prerequisites: Docker with Compose, and Node.js 22 or later (see `.nvmrc`) for tests and development mode.
 
 ### Everything in containers
 
@@ -45,7 +46,7 @@ Prerequisites: Docker with Compose, Node.js 22 or later (for tests and developme
 docker compose up --build
 ```
 
-This starts PostgreSQL, generates a development JWT key pair in `.keys/`, applies migrations, seeds data, then starts the API (<http://localhost:4000/api/health>) and the web app (<http://localhost:3000>).
+This starts PostgreSQL, generates a development JWT key pair in `.keys/`, applies migrations, seeds data on the first run, then starts the API (<http://localhost:4000/api/health>) and the web app (<http://localhost:3000>). Ports are published on `127.0.0.1` only. Data persists in a Docker volume; `docker compose down -v` removes it.
 
 ### Development mode
 
@@ -71,18 +72,26 @@ Two restaurants with separate data, and an owner and a staff user in each. All s
 
 Owners can manage products and orders; staff can read products and create, read and advance orders.
 
-### Browser note
+### Calling the API from other clients
 
-`Secure` cookies on `http://localhost` work in Chromium-based browsers and Firefox, but may not work in Safari. Use Chromium or Firefox locally, or serve over HTTPS.
+Browsers authenticate with the cookies set at login. Other clients can send `Authorization: Bearer <access token>`, and must include an `X-Requested-With` header on `POST`, `PATCH` and `DELETE` requests; the API rejects state-changing requests without it as a cross-site request forgery safeguard.
+
+### Troubleshooting
+
+- **Signed out immediately in Safari:** `Secure` cookies on `http://localhost` work in Chromium-based browsers and Firefox, but may be rejected by Safari. Use Chromium or Firefox locally, or serve over HTTPS.
+- **`port is already allocated`:** another process is using 3000, 4000 or 5432, often a development server started with `npm run dev:*`. Stop it, or change `DB_PORT` in `.env`.
+- **Login fails after changing `SEED_PASSWORD`:** seeding runs only once. Run `npm run db:seed:reset`, or `docker compose down -v` and start again.
 
 ## Tests
 
-The database must be running, migrated and seeded for the integration and end-to-end suites.
+The database must be running, migrated and seeded for the integration and end-to-end suites. These suites add their own records, which accumulate between runs; `npm run db:seed:reset` restores the seed data.
 
 ```bash
 npm test                 # unit tests (no database needed)
 npm run test:integration # API against PostgreSQL: isolation, RLS, auth, refresh rotation
 npm run test:e2e         # Playwright flows (starts API and web if not already running)
+npm run lint
+npm run format:check
 ```
 
 Playwright needs a browser once: `npx playwright install chromium`.
@@ -91,7 +100,7 @@ The tenant-isolation guarantees are covered by `apps/api/test/isolation.int-spec
 
 ## API overview
 
-All routes are under `/api`. Lists accept `limit` (1–100) and `offset`.
+All routes are under `/api`. Lists accept `limit` (1–100) and `offset`. See [`docs/SPEC.md`](docs/SPEC.md#6-api) for request bodies and status codes.
 
 | Route                                                                 | Roles        |
 | --------------------------------------------------------------------- | ------------ |
@@ -109,13 +118,13 @@ All routes are under `/api`. Lists accept `limit` (1–100) and `offset`.
 apps/api      NestJS API: auth, tenancy, products, orders, SQL migrations, seed
 apps/web      Nuxt 3 client
 e2e           Playwright tests
-docs          Specification, plan, task list and ADRs
+docs          Specification and architecture decision records
 docker        Database role initialisation
 ```
 
 ## Scope and limitations
 
-Not included: self-service registration, password reset, rate limiting, key rotation/JWKS, observability and deployment manifests. See the ADRs for the intended evolution.
+Not included: self-service registration, password reset, product management in the web client, rate limiting, key rotation/JWKS, observability and deployment manifests. See the ADRs for the intended evolution, and [SECURITY.md](SECURITY.md) for known limitations.
 
 ## License
 

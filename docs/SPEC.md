@@ -2,114 +2,154 @@
 
 ## 1. Purpose
 
-Reference implementation of a multi-tenant SaaS for restaurant ordering. Tenants are restaurants; each owns products and orders. Demonstrates defense-in-depth tenant isolation: authenticated tenant identity, application-level scoping, and PostgreSQL Row-Level Security.
+A reference implementation of a multi-tenant SaaS for restaurant ordering. Each tenant is a restaurant that owns its products and orders. The system demonstrates defense-in-depth tenant isolation: an authenticated tenant identity, application-level scoping and PostgreSQL Row-Level Security (RLS).
 
 ## 2. Scope
 
-In: auth (login/JWT), product CRUD, order CRUD, two seeded tenants with users, two-layer isolation, Nuxt UI (login + orders list/create), unit/integration/e2e tests, Docker Compose, ADRs.
-Out: registration/onboarding, password reset, payments, inventory, i18n, real-time updates, observability stack, deployment/IaC, rate limiting (documented as future work).
+**Included:** authentication with access and refresh tokens; product and order management; two seeded tenants with an owner and a staff user each; tenant isolation in the application and the database; a web client to sign in, list orders, create orders and advance their status; unit, integration and end-to-end tests; a Docker Compose environment.
 
-## 3. Stack
+**Excluded:** self-service registration, password reset, product management in the web client, payments, inventory, internationalization, real-time updates, rate limiting, JWT key rotation, observability and deployment manifests.
 
-NestJS + TypeScript (API), Nuxt 3 (web), PostgreSQL 16, TypeORM, Jest, Playwright, Docker Compose, npm workspaces. Passwords hashed with argon2id. JWT RS256 via `@nestjs/jwt`.
+## 3. Technology
+
+| Concern          | Choice                                           |
+| ---------------- | ------------------------------------------------ |
+| API              | NestJS 10, TypeScript, TypeORM                   |
+| Web client       | Nuxt 3 (client-rendered SPA)                     |
+| Database         | PostgreSQL 16                                    |
+| Password hashing | argon2id                                         |
+| Tokens           | RS256 JWT access token, opaque refresh token     |
+| Tests            | Jest, Supertest, Playwright                      |
+| Tooling          | npm workspaces, ESLint, Prettier, Docker Compose |
 
 ## 4. Architecture
 
-Modular monolith. Modules: `AuthModule` (own boundary: users, credentials, token issue/verify, exposes only `AuthService` and `JwtAuthGuard`), `TenancyModule` (context, transaction interceptor, scoped repository base), `ProductsModule`, `OrdersModule`, `TenantsModule` (minimal, read model for seeding/tests). Other modules depend on Auth only through its guard and the `AuthenticatedUser` type. Auth is a separate module, not a separate service (ADR covers why, and the extraction path: publish the public key via JWKS, move user store and login to its own service or an external IdP such as Keycloak/Auth0/Cognito; consumers keep validating with the public key unchanged).
+The API is a modular monolith:
 
-Request flow:
+| Module           | Responsibility                                                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ConfigModule`   | Typed configuration from environment variables.                                                                                                        |
+| `DatabaseModule` | TypeORM connection as the runtime database role.                                                                                                       |
+| `TenancyModule`  | `TenantContext`, `TenantRunner.runInTenantContext`, `TenantTransactionInterceptor`, `TenantRepository` base class and the `Tenant` entity.             |
+| `AuthModule`     | Login, refresh, logout, current session. Exports only `JwtAuthGuard`, `RolesGuard` and `TokenService`; other modules use the `AuthenticatedUser` type. |
+| `ProductsModule` | Product catalogue. Exports `ProductsRepository` for order pricing.                                                                                     |
+| `OrdersModule`   | Orders, order items and status transitions.                                                                                                            |
 
-1. `JwtAuthGuard` verifies RS256 signature, expiry, issuer, audience; extracts `{sub, tenantId, role}`.
-2. `TenantContext` (AsyncLocalStorage) stores `tenantId`, `userId`, `role` for the request. The tenant is taken **only** from the validated token; any `tenantId`/`X-Tenant-*` supplied by the client in headers, query, or body is ignored (DTO whitelist strips it; `forbidNonWhitelisted` makes body attempts a 400).
-3. `TenantTransactionInterceptor` opens a transaction on the app-role connection and runs `select set_config('app.tenant_id', $1, true)` (transaction-local, pool-safe), binding the `EntityManager` into the context.
-4. Services use `TenantRepository` subclasses, which obtain the manager from the context (no manager = hard error), always merge `tenantId` into filters, and always stamp `tenantId` on inserts.
-5. PostgreSQL RLS policies enforce `tenant_id = current_setting('app.tenant_id', true)::uuid` for both `USING` and `WITH CHECK`; unset setting yields zero rows (fail-closed).
+Request pipeline for an authenticated route:
 
-## 5. Data model (all tenant tables carry `tenant_id uuid not null`, indexed with `(tenant_id, …)`)
+1. `CsrfGuard`: for state-changing methods, requires an `X-Requested-With` header and, when present, an `Origin` equal to the configured web origin.
+2. `JwtAuthGuard`: reads the access token from the `access_token` cookie or an `Authorization: Bearer` header, verifies it (RS256, issuer, audience, expiry, claim shape) and attaches `{ userId, tenantId, role }` to the request.
+3. `RolesGuard`: enforces `@Roles(...)`.
+4. `TenantTransactionInterceptor`: calls `runInTenantContext(tenantId, handler)`, which opens a transaction, runs `SELECT set_config('app.tenant_id', $1, true)` and binds the tenant and the transaction's `EntityManager` in an `AsyncLocalStorage` context.
+5. `ValidationPipe`: validates DTOs and rejects unknown properties (`whitelist`, `forbidNonWhitelisted`).
+6. Handler and services: data access goes through `TenantRepository` subclasses, which scope every filter to the context tenant and stamp it on inserts.
+7. PostgreSQL applies the RLS policy to every statement.
 
-- `tenants(id, name, slug unique, created_at)` — no RLS (not tenant data); app role has SELECT only.
-- `users(id, tenant_id, email unique globally, password_hash, role enum[owner,staff], created_at)` — RLS enabled.
-- `products(id, tenant_id, name, description, price_cents int ≥0, currency char(3) default 'USD', active bool, created_at, updated_at)` — RLS.
-- `orders(id, tenant_id, status enum[pending,preparing,served,paid,cancelled], customer_label text null, total_cents int, created_by uuid, created_at, updated_at)` — RLS.
-- `order_items(id, tenant_id, order_id, product_id, product_name, unit_price_cents, quantity int >0)` — RLS; composite FKs `(tenant_id, order_id)` / `(tenant_id, product_id)` so cross-tenant references are impossible at the schema level.
-- `refresh_tokens(id, tenant_id, user_id, family_id, token_hash unique, expires_at, used_at null, revoked_at null, created_at)` — RLS. Because refresh happens before a tenant is known, the lookup goes through the `SECURITY DEFINER` function `auth_find_refresh_token(hash)` (alongside `auth_find_user_by_email`); the authoritative `tenant_id` then comes from the stored row, never the client, and rotation and revocation run under RLS in that tenant's context.
-- Prices are integer cents. Unit price and name are snapshotted at order time; total is computed server-side.
+Public routes (`/auth/login`, `/auth/refresh`, `/auth/logout`, `/health`) run without a tenant context.
 
-Roles: `app_owner` (owns the schema; used only by migrations and seed), `app_runtime` (non-superuser, `NOBYPASSRLS`, DML only, used by the API), and `app_auth` (`BYPASSRLS`, owns only the two lookup functions). Tables use `FORCE ROW LEVEL SECURITY`.
+### Running logic outside HTTP
 
-**Login lookup problem:** login happens before a tenant is known. A `SECURITY DEFINER` function `auth_find_user_by_email(email)` owned by `app_auth` returns the single matching user row (id, tenant_id, password_hash, role); `app_runtime` has EXECUTE on it and no other way around RLS on `users`. Documented in an ADR.
+`TenantRunner.runInTenantContext(tenantId, fn)` is the single entry point for tenant-scoped work. The HTTP interceptor is a thin wrapper over it, so background jobs, command-line tasks and other non-HTTP callers share the same isolation path. It rejects identifiers that are not UUIDs and refuses to run nested inside an existing tenant context. The caller must obtain `tenantId` from a trusted source.
 
-## 6. API (JSON, prefix `/api`)
+## 5. Data model
 
-| Method & path                                                                                                                                                        | Role           | Notes                                                                                                                                             |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /auth/login` `{email,password}`                                                                                                                                | public         | Sets access + refresh cookies, body returns user summary only (no token); generic 401 on any failure; timing-safe via dummy hash on unknown email |
-| `POST /auth/refresh`                                                                                                                                                 | refresh cookie | Rotates refresh token, issues new access cookie; reuse of a spent token revokes the family (401)                                                  |
-| `POST /auth/logout`                                                                                                                                                  | any            | Revokes family, clears cookies                                                                                                                    |
-| `GET /auth/me`                                                                                                                                                       | any            | Returns user, role, tenant                                                                                                                        |
-| `GET /products`, `GET /products/:id`                                                                                                                                 | owner, staff   | Pagination `limit` (1–100, default 20) / `offset`; response `{items,total,limit,offset}`                                                          |
-| `POST /products`, `PATCH /products/:id`, `DELETE /products/:id`                                                                                                      | owner          | Delete returns 409 if referenced by an order (suggest `active=false`)                                                                             |
-| `GET /orders`, `GET /orders/:id`                                                                                                                                     | owner, staff   | Filter by `status`; same pagination; includes items                                                                                               |
-| `POST /orders` `{customerLabel?, items:[{productId,quantity}]}`                                                                                                      | owner, staff   | Product must be active and in tenant else 422/404; staff and owner both                                                                           |
-| `PATCH /orders/:id` (status, customerLabel)                                                                                                                          | owner, staff   | Status transitions: pending→preparing→served→paid; cancelled from pending/preparing; invalid → 409                                                |
-| `DELETE /orders/:id`                                                                                                                                                 | owner          |                                                                                                                                                   |
-| Errors use a consistent `{statusCode, error, message}` body. Cross-tenant resource ids return **404** (never 403) to avoid existence leaks. `GET /health` is public. |
+All tenant-owned tables carry `tenant_id uuid NOT NULL`, are indexed with the tenant as the leading column, and use composite foreign keys `(tenant_id, …)` so rows can only reference rows of the same tenant.
 
-Staff: read products; create, read, update-status orders. Owner: everything.
+| Table            | Columns                                                                                                               | RLS |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------- | --- |
+| `tenants`        | `id`, `name`, `slug` (unique), `created_at`                                                                           | No  |
+| `users`          | `id`, `tenant_id`, `email` (globally unique, lower-case), `password_hash`, `role` (`owner`/`staff`), `created_at`     | Yes |
+| `products`       | `id`, `tenant_id`, `name`, `description`, `price_cents`, `currency`, `active`, `created_at`, `updated_at`             | Yes |
+| `orders`         | `id`, `tenant_id`, `status`, `customer_label`, `total_cents`, `created_by`, `created_at`, `updated_at`                | Yes |
+| `order_items`    | `id`, `tenant_id`, `order_id`, `product_id`, `product_name`, `unit_price_cents`, `quantity`                           | Yes |
+| `refresh_tokens` | `id`, `tenant_id`, `user_id`, `family_id`, `token_hash` (unique), `expires_at`, `used_at`, `revoked_at`, `created_at` | Yes |
+
+Prices are integer cents. Order items snapshot the product name and unit price; the order total is computed by the server.
+
+### Row-Level Security
+
+Every table marked above has RLS enabled and forced, with one policy for both `USING` and `WITH CHECK`:
+
+```sql
+tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid
+```
+
+Without a tenant setting the expression is NULL and no row is visible or writable.
+
+### Database roles
+
+| Role          | Attributes                     | Used for                                                       |
+| ------------- | ------------------------------ | -------------------------------------------------------------- |
+| `app_owner`   | Owns the schema, `NOBYPASSRLS` | Migrations and seed. Subject to RLS because tables are forced. |
+| `app_runtime` | `NOBYPASSRLS`, DML only        | The API.                                                       |
+| `app_auth`    | `BYPASSRLS`, no login          | Owns the two pre-tenant lookup functions only.                 |
+
+### Pre-tenant lookups
+
+Login and refresh happen before the tenant is known. Two `SECURITY DEFINER` functions owned by `app_auth`, executable only by `app_runtime`, each return at most one row for an exact key: `auth_find_user_by_email(email)` and `auth_find_refresh_token(token_hash)`. All subsequent reads and writes run in the tenant context of the returned row.
+
+## 6. API
+
+JSON over HTTP, all routes under `/api`. Errors use NestJS's `{ statusCode, message, error }` body. Identifiers in paths must be UUIDs (otherwise `400`). List endpoints accept `limit` (1–100, default 20) and `offset` (default 0) and return `{ items, total, limit, offset }`.
+
+| Route                  | Access         | Behaviour                                                                                                                                                        |
+| ---------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /auth/login`     | Public         | Body `{ email, password }`. Sets the session cookies and returns `{ userId, role }`. Any failure returns the same `401`.                                         |
+| `POST /auth/refresh`   | Refresh cookie | Rotates the refresh token and issues a new access token. A replayed token revokes its family. Failures return `401` and clear the cookies.                       |
+| `POST /auth/logout`    | Public         | Revokes the session family, if any, and clears the cookies. Returns `204`.                                                                                       |
+| `GET /auth/me`         | Owner, staff   | Returns `{ id, email, role, tenant: { id, name, slug } }`.                                                                                                       |
+| `GET /products`        | Owner, staff   | Lists the tenant's products.                                                                                                                                     |
+| `GET /products/:id`    | Owner, staff   | `404` if absent or owned by another tenant.                                                                                                                      |
+| `POST /products`       | Owner          | Body `{ name, description?, priceCents, active? }`.                                                                                                              |
+| `PATCH /products/:id`  | Owner          | Partial update of the same fields.                                                                                                                               |
+| `DELETE /products/:id` | Owner          | `409` if referenced by an order; deactivate it instead.                                                                                                          |
+| `GET /orders`          | Owner, staff   | Optional `status` filter. Orders include their items, newest first.                                                                                              |
+| `GET /orders/:id`      | Owner, staff   | `404` if absent or owned by another tenant.                                                                                                                      |
+| `POST /orders`         | Owner, staff   | Body `{ customerLabel?, items: [{ productId, quantity }] }`. Repeated products are merged. `422` if any product is unknown, inactive or owned by another tenant. |
+| `PATCH /orders/:id`    | Owner, staff   | Body `{ status?, customerLabel? }`. `409` for an invalid transition or a concurrent modification.                                                                |
+| `DELETE /orders/:id`   | Owner          | Deletes the order and its items.                                                                                                                                 |
+| `GET /health`          | Public         | Liveness check.                                                                                                                                                  |
+
+Status transitions: `pending → preparing → served → paid`; `cancelled` is reachable from `pending` and `preparing`. `paid` and `cancelled` are final.
+
+Resources of other tenants are indistinguishable from missing ones (`404`); `403` is reserved for role violations.
 
 ## 7. Tokens and cookies
 
-**Access token:** RS256 JWT, 15 min. Claims: `sub`, `tenant_id`, `role`, `iss`, `aud`, `iat`, `exp` only (no PII, no email). Private key only in the API (`JWT_PRIVATE_KEY_PATH`), public key via `JWT_PUBLIC_KEY_PATH`; `npm run keys:generate` creates a local pair in `.keys/` (gitignored); `.env.example` documents all variables. Guard pins RS256 (no `none`/HS confusion).
-**Refresh token:** opaque 256-bit random value (not a JWT), 7-day lifetime, stored **hashed** (SHA-256) in `refresh_tokens`. Rotated on every use; each token belongs to a `family_id`; presenting an already-used token revokes the whole family (reuse detection). Logout revokes the family.
-**Delivery:** the browser talks to the API directly. Both tokens are set by the API as cookies that JavaScript can never read: `HttpOnly; Secure; SameSite=Strict`, access cookie `Path=/api`, refresh cookie `Path=/api/auth` (never sent to product/order endpoints; it reaches only `POST /auth/refresh` and `POST /auth/logout`, the latter needing it to revoke the family — a path of exactly `/api/auth/refresh` would prevent logout from revoking server-side). `Secure` is kept in all environments (browsers treat `http://localhost` as a secure context). Web and API are same-site (differing ports are same-site), so `Strict` works; CORS allows only the web origin with `credentials: true`.
-**CSRF:** since cookies are sent automatically, state-changing requests (POST/PATCH/DELETE, including refresh/logout) require a custom header `X-Requested-With: XMLHttpRequest`-style check plus `Origin` validation against the allowed web origin; `SameSite=Strict` is the primary defense, these are defense-in-depth. No CSRF token endpoint needed (documented in ADR).
-The guard reads the access token from the cookie (an `Authorization: Bearer` header is also accepted for API/test clients).
+- **Access token:** RS256 JWT, 15 minutes. Claims: `sub`, `tenant_id`, `role`, `iss`, `aud`, `iat`, `exp`. No personal data.
+- **Refresh token:** 256-bit random value, 7 days, stored as a SHA-256 hash. Rotated on every use with a compare-and-set; each session has a `family_id`, and presenting a rotated token revokes the family.
+- **Cookies:** both are `HttpOnly; Secure; SameSite=Strict`. The access cookie uses `Path=/api`; the refresh cookie uses `Path=/api/auth`, so it reaches only the refresh and logout endpoints. No token appears in a response body.
+- **Keys:** the private key is read from `JWT_PRIVATE_KEY_PATH`, the public key from `JWT_PUBLIC_KEY_PATH`. `npm run keys:generate` creates a development pair in `.keys/`.
+- **Non-browser clients** may send `Authorization: Bearer <access token>` and must include `X-Requested-With` on state-changing requests.
 
-## 8. Frontend (Nuxt 3)
+## 8. Web client
 
-Pages: `/login`, `/orders` (list with status filter + pagination, create-order form selecting active products and quantities, status update). A `useApi` composable calls the API with `credentials: 'include'`; on a 401 it performs a single-flight `POST /auth/refresh` and retries once, otherwise redirects to `/login`. Session state comes from `GET /auth/me` (token never readable by JS, so nothing is kept in localStorage). The browser calls the API directly (no Nuxt server proxy routes). Nuxt runs as a client-rendered SPA (`ssr: false`), which avoids forwarding cookies server-side. Header shows restaurant name and role; logout button. Plain CSS, English UI.
+A client-rendered Nuxt application served separately from the API, which it calls directly with `credentials: 'include'`.
+
+- `/login`: email and password form.
+- `/orders`: restaurant name, signed-in user and role, sign-out; a form to create an order from active products with a running total; the order list with status filter, pagination and buttons for the allowed next statuses.
+- On a `401`, the client performs one refresh (shared by concurrent requests) and retries once. When the session ends, a plugin redirects to `/login`. Route middleware loads the session from `/auth/me` and guards pages.
 
 ## 9. Seed data
 
-Tenants: "Trattoria Roma" and "Sushi Kaze", 6 products and 4 orders each (distinct names/prices). Users (dev-only, documented in README): `owner@trattoria.example`, `staff@trattoria.example`, `owner@sushikaze.example`, `staff@sushikaze.example`; known dev password from env `SEED_PASSWORD`.
+Two tenants, Trattoria Roma and Sushi Kaze, with six products and four orders each, and users `owner@` and `staff@` on `trattoria.example` and `sushikaze.example`. All seeded users share the development password in `SEED_PASSWORD`. Seeding runs once; `npm run db:seed:reset` wipes and reseeds.
 
 ## 10. Security requirements
 
-- Tokens never exposed to JavaScript (httpOnly + Secure + SameSite=Strict cookies); short-lived access token, rotating refresh token with reuse detection; CSRF defense-in-depth (SameSite, Origin check, custom header).
-- Tenant only from verified token; client-supplied tenant ignored.
-- Isolation proven independently at app layer and DB layer.
-- Helmet, CORS limited to web origin, input validation with whitelist, argon2id, no secrets in repo, generic auth errors.
+- The tenant is derived only from a verified token or, during refresh, from the stored token row.
+- Isolation holds independently in the application layer and in the database.
+- Tokens are never readable by page scripts.
+- Cross-site request forgery is mitigated by `SameSite=Strict`, an `Origin` check and a required custom header.
+- Authentication failures do not reveal whether an email exists.
+- Secrets are not committed; development keys and `.env` are git-ignored.
+- Containers run as an unprivileged user and publish ports on `127.0.0.1` only.
 
-## 11. Test requirements
+## 11. Testing
 
-**Unit (Jest):** `TenantContext`; guard (valid/expired/tampered/wrong-alg token); `TenantRepository` filter merging and stamping; order total and status-transition logic; role guard; auth service.
-**Integration (Jest + real Postgres via compose):**
+| Level       | Tooling                     | Covers                                                                                                                                                                                                                                              |
+| ----------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit        | Jest                        | Tenant context and runner, scoped repository, token verification including forged tokens, guards, order rules, `AuthService` login/refresh/logout, `OrdersService` status updates.                                                                  |
+| Integration | Jest, Supertest, PostgreSQL | Cross-tenant isolation over HTTP; request manipulation and forged tokens; roles; cookie attributes; refresh rotation, reuse detection and logout; RLS verified with raw connections that bypass the application; `runInTenantContext` outside HTTP. |
+| End-to-end  | Playwright                  | Sign in and create an order; a second tenant cannot see it; unauthenticated access redirects to sign-in.                                                                                                                                            |
 
-1. _Cross-tenant read isolation:_ user of tenant A lists/gets/updates/deletes B's products and orders → empty/404.
-2. _Request manipulation:_ sending `tenant_id`/`tenantId` in body, query, and `X-Tenant-Id` header, or a token with a swapped/forged tenant claim (bad signature, HS256 with public key as secret, `alg: none`) never changes the effective tenant (ignored/400/401).
-3. _RLS independent of app layer:_ using the runtime connection directly, bypassing `TenantRepository`, with tenant A setting returns zero B rows; inserting a row with B's tenant id under A's setting fails; unset setting returns zero rows.
-4. _Cross-tenant references:_ creating an order item referencing B's product fails.
-5. _Role enforcement:_ staff cannot create/modify/delete products or delete orders.
-6. Auth: login success/failure, expired token rejected; cookie attributes (HttpOnly, Secure, SameSite=Strict, paths); login body contains no token.
-7. Refresh: rotation works; reusing a spent refresh token revokes the family; logout invalidates refresh; refresh token of tenant A never yields a token for tenant B; mutating request from a disallowed `Origin` is rejected.
-   **E2E (Playwright, against compose stack):** (a) log in as Trattoria owner, create an order, see it in the list; (b) log out, log in as Sushi Kaze, confirm Trattoria's order is absent and own data present. Optional third: staff cannot see product management actions.
-
-## 12. Non-functional / conventions
-
-Simple readable code; comments only for design rationale, in English. Conventional commits, professional messages. ADRs (Context / Decision / Alternatives considered / Consequences), English. Lint + format (ESLint, Prettier). GitHub Actions CI running lint, unit, integration (Postgres service), build. Compose services: `db`, `migrate` (one-shot), `api`, `web`.
-
-## 13. ADRs (docs/adr)
-
-0001 npm-workspaces monorepo · 0002 modular monolith with isolated AuthModule (and extraction path) · 0003 TypeORM · 0004 shared schema with `tenant_id` · 0005 tenant from validated JWT only · 0006 RS256 asymmetric JWT, 15-min access token + rotating opaque refresh token with reuse detection · 0007 AsyncLocalStorage context + request-scoped transaction + scoped repository · 0008 PostgreSQL RLS, FORCE, non-owner runtime role, fail-closed · 0009 login lookup via SECURITY DEFINER function · 0010 argon2id · 0011 token delivery in httpOnly/Secure/SameSite=Strict cookies set directly by the API, with CSRF defense-in-depth; alternative considered: Nuxt as a BFF (server holds tokens and proxies API calls) — not chosen because it adds a second hop and a second session layer to secure and operate, couples the API's auth to one frontend, and complicates non-browser clients, while same-site cookies already keep tokens away from JavaScript; revisit if multiple frontends or server-side token exchange are needed · 0012 testing strategy (real Postgres for RLS) · 0013 404 over 403 for cross-tenant ids.
-
-## 14. Assumptions
-
-Refresh token 7 days, opaque and hashed in DB; web and API share a site (localhost, different ports) so SameSite=Strict works; USD currency; argon2id; Postgres 16; GitHub Actions CI included; hard delete; limit/offset pagination; UI in English; no rate limiting (future work); dev-only seed credentials.
-
-## 15. Running logic outside HTTP
-
-`runInTenantContext(tenantId, fn)` opens a transaction on the runtime connection, sets `app.tenant_id` (transaction-local), binds the `TenantContext`, runs `fn`, and commits or rolls back. The HTTP `TenantTransactionInterceptor` is a thin wrapper over this helper, so background jobs, CLI tasks and future non-HTTP entry points (e.g. tool or MCP servers authenticating by other means) share exactly one isolation path. The caller is responsible for obtaining `tenantId` from a trusted source.
-
-## 16. Browser compatibility note
-
-`Secure` cookies on `http://localhost` are accepted by Chromium-based browsers and Firefox; Safari may reject them. Use Chromium or Firefox for local development, or serve over HTTPS.
+Integration and end-to-end tests require a migrated and seeded database. They rely on the seeded tenants and users and add their own records, which accumulate between runs.

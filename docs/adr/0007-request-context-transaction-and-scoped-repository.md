@@ -9,8 +9,8 @@ Application-level isolation must not rely on each query remembering a `WHERE ten
 ## Decision
 
 - `TenantContext` wraps `AsyncLocalStorage` and holds the tenant id, the identity and the `EntityManager` of the current transaction.
-- `TenantRunner.runInTenantContext(tenantId, fn)` is the only way to enter a tenant context: it opens a transaction, runs `SELECT set_config('app.tenant_id', $1, true)`, binds the context and commits or rolls back. The HTTP `TenantTransactionInterceptor` delegates to it, so HTTP and non-HTTP code share one path.
-- `TenantRepository` is the base class for tenant-owned data. Reads merge the context tenant into the filter (applied last, so callers cannot override it), inserts stamp it, updates never rewrite it, and use outside a context throws.
+- `TenantRunner.runInTenantContext(tenantId, fn)` is the only way to enter a tenant context: it opens a transaction, runs `SELECT set_config('app.tenant_id', $1, true)`, binds the context and commits or rolls back. The HTTP `TenantTransactionInterceptor` delegates to it, so HTTP and non-HTTP code share one path. Nested calls are refused: they would open a second transaction and silently switch the tenant for the inner code.
+- `TenantRepository` is the base class for tenant-owned data. Reads merge the context tenant into the filter (applied last, so callers cannot override it), inserts stamp it, updates never rewrite it, and use outside a context throws. `save` only inserts, because an upsert by primary key would hit rows hidden by RLS.
 
 ## Alternatives considered
 
