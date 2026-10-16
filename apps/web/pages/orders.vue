@@ -12,6 +12,7 @@ const offset = ref(0);
 const statusFilter = ref<OrderStatus | ''>('');
 const products = ref<Product[]>([]);
 const loadError = ref('');
+const actionError = ref('');
 
 const customerLabel = ref('');
 const lines = ref<{ productId: string; quantity: number }[]>([{ productId: '', quantity: 1 }]);
@@ -32,8 +33,12 @@ async function loadOrders() {
 }
 
 async function loadProducts() {
-  const page = await request<Page<Product>>('/products', { query: { limit: 100 } });
-  products.value = page.items.filter((p) => p.active);
+  try {
+    const page = await request<Page<Product>>('/products', { query: { limit: 100 } });
+    products.value = page.items.filter((p) => p.active);
+  } catch {
+    formError.value = 'Unable to load products.';
+  }
 }
 
 const selectedLines = computed(() => lines.value.filter((l) => l.productId));
@@ -71,12 +76,16 @@ async function createOrder() {
 }
 
 async function changeStatus(order: Order, status: OrderStatus) {
+  actionError.value = '';
   try {
     await request(`/orders/${order.id}`, { method: 'PATCH', body: { status } });
-    await loadOrders();
-  } catch {
-    loadError.value = 'The status could not be updated.';
+  } catch (err: any) {
+    actionError.value =
+      err?.statusCode === 409
+        ? 'The order changed in the meantime; the list has been refreshed.'
+        : 'The status could not be updated.';
   }
+  await loadOrders();
 }
 
 function setFilter() {
@@ -151,6 +160,7 @@ onMounted(() => {
           </select>
         </label>
       </div>
+      <p v-if="actionError" class="error" role="alert" data-testid="action-error">{{ actionError }}</p>
       <p v-if="loadError" class="error" role="alert">{{ loadError }}</p>
       <p v-else-if="orders.length === 0" class="muted">No orders yet.</p>
       <table v-else data-testid="orders-table">

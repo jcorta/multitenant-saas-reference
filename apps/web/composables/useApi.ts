@@ -35,8 +35,9 @@ export function useApi() {
       if (err?.statusCode !== 401 || isAuthEndpoint) throw err;
 
       if (await refresh()) return send<T>(path, options);
+      // Navigation is left to the session watcher plugin and the route middleware, so this
+      // function is safe to call during a navigation.
       session.value = null;
-      await navigateTo('/login');
       throw err;
     }
   }
@@ -49,7 +50,6 @@ export function useApi() {
   async function logout() {
     await send('/auth/logout', { method: 'POST' }).catch(() => undefined);
     session.value = null;
-    await navigateTo('/login');
   }
 
   async function loadSession(): Promise<Session | null> {
