@@ -31,17 +31,17 @@ jobs:
       - run: cp .env.example .env
       - run: npm run keys:generate
       - name: Create database roles
-        run: |
-          export PGPASSWORD=postgres
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
-          CREATE ROLE app_owner LOGIN PASSWORD 'owner_dev_password' NOSUPERUSER NOBYPASSRLS;
-          CREATE ROLE app_runtime LOGIN PASSWORD 'runtime_dev_password' NOSUPERUSER NOBYPASSRLS;
-          CREATE ROLE app_auth NOLOGIN NOSUPERUSER BYPASSRLS;
-          GRANT app_auth TO app_owner;
-          ALTER DATABASE restaurants OWNER TO app_owner;
-          SQL
+        run: sh docker/db/init-roles.sh
+        env:
+          PGHOST: localhost
+          PGPASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: restaurants
+          DB_OWNER_PASSWORD: owner_dev_password
+          DB_RUNTIME_PASSWORD: runtime_dev_password
       - run: npm run format:check
       - run: npm run lint
+      - run: npm run typecheck -w apps/web
       - run: npm test
       - run: npm run db:migrate
       - run: npm run db:seed

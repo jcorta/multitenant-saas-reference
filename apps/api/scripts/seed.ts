@@ -4,7 +4,7 @@ import { Client } from 'pg';
 import { dbConfig } from '../src/config';
 import { SEED_TENANTS } from './seed-data';
 
-// Resets and reseeds development data. Tenant-owned rows are written inside a transaction that
+// Seeds development data on an empty database (pass --reset to wipe and reseed). Tenant-owned rows are written inside a transaction that
 // sets app.tenant_id, so even the schema owner goes through the same RLS policies as the API.
 async function main() {
   const password = process.env.SEED_PASSWORD;

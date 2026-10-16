@@ -36,7 +36,6 @@ export interface Session {
   cookie: string;
   access: string;
   refresh: string;
-  setCookie: string[];
 }
 
 export function parseSetCookie(setCookie: string[] | undefined): Record<string, string> {
@@ -61,7 +60,6 @@ export async function login(app: INestApplication, email: string): Promise<Sessi
     access: cookies.access_token,
     refresh: cookies.refresh_token,
     cookie: `access_token=${cookies.access_token}`,
-    setCookie: res.headers['set-cookie'] as unknown as string[],
   };
 }
 

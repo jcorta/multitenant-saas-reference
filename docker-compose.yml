@@ -29,6 +29,7 @@ services:
 
   # One-shot: applies migrations (as the schema owner) and seeds development data once.
   migrate:
+    init: true
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -47,6 +48,8 @@ services:
         condition: service_healthy
 
   api:
+    # Runs a minimal init as PID 1 so signals reach Node and stops are not forced.
+    init: true
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -78,6 +81,7 @@ services:
       retries: 20
 
   web:
+    init: true
     build:
       context: .
       dockerfile: apps/web/Dockerfile
